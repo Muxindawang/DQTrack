@@ -677,9 +677,9 @@ def generate_record(ann_rec: dict, x1: float, y1: float, x2: float, y2: float,
 if __name__ == '__main__':
     # track_info = 'track'
     # track_info_test = 'track_test'
-    track_info = 'track_cat_10'
-    track_info_test = 'track_test_cat_10'
+    track_info = 'track_mini_track'
+    track_info_test = 'track_test_mini_track'
     # generate .pkl for train, and val
-    create_nuscenes_infos('data/nuscenes/', track_info)
+    create_nuscenes_infos('data/nuscenes-mini/', track_info, version='v1.0-mini')
     # generate .pkl for test set
-    create_nuscenes_infos('data/nuscenes/', track_info_test, version='v1.0-test')
+    # create_nuscenes_infos('data/nuscenes/', track_info_test, version='v1.0-mini')

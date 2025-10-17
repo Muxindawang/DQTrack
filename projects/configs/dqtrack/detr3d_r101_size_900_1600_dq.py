@@ -246,7 +246,7 @@ data = dict(
     train=dict(
         type=dataset_type,
         data_root=data_root,
-        ann_file=info_root + 'track_cat_10_infos_train.pkl', # please change to your own info file
+        ann_file=data_root + "track_mini_track_infos_train.pkl", # please change to your own info file
         num_frames_per_sample=track_frame,  # number of frames for each clip in training.
         pipeline=train_pipeline,
         pipeline_post=train_pipeline_post,
@@ -259,11 +259,11 @@ data = dict(
         box_type_3d='LiDAR'),
     val=dict(type=dataset_type, pipeline=test_pipeline, pipeline_post=test_pipeline_post, 
              classes=class_names, track_classes=track_names, modality=input_modality, 
-             ann_file=info_root + "track_cat_10_infos_val.pkl",
+             ann_file=data_root + "track_mini_track_infos_val.pkl",
              num_frames_per_sample=1), # please change to your own info file
     test=dict(type=dataset_type, pipeline=test_pipeline, pipeline_post=test_pipeline_post, 
              classes=class_names, track_classes=track_names, modality=input_modality, 
-             ann_file=info_root + "track_cat_10_infos_val.pkl",
+             ann_file=data_root + "track_mini_track_infos_val.pkl",
              num_frames_per_sample=1)) # please change to your own info file
 
 optimizer = dict(
@@ -282,12 +282,12 @@ lr_config = dict(
     warmup_iters=500,
     warmup_ratio=1.0 / 3,
     min_lr_ratio=1e-3)
-total_epochs = 5
+total_epochs = 25
 evaluation = dict(interval=24, pipeline=test_pipeline)
 checkpoint_config = dict(max_keep_ckpts=5)
 
 find_unused_parameters = True
 runner = dict(type='EpochBasedRunner', max_epochs=total_epochs)
-load_from='ckpts/pretrain/detr3d_resnet101_cbgs.pth' # download from https://drive.google.com/file/d/1sXPFiA18K9OMh48wkk9dF1MxvBDUCj2t/view?usp=sharing
+load_from='ckpts/detr3d_res101_size_900_1600_finetune_amota_36_7.pth' # download from https://drive.google.com/file/d/1sXPFiA18K9OMh48wkk9dF1MxvBDUCj2t/view?usp=sharing
 # fp16 setting
 fp16 = dict(loss_scale=32.)

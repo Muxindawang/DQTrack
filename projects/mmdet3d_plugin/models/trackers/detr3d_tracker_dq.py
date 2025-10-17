@@ -173,23 +173,23 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
 
     def query_asso(self, detector, tracker, obj_embedding, track_embedding, time_delta):
         # update pos embed to current frame
-        track_pts = tracker.pos_velo[:,:2].clone()
-        track_velo = tracker.pos_velo[:,2:].clone()
-        obj_pts = detector.pos_velo[:,:2].clone()
+        track_pts = tracker.pos_velo[:,:2].clone()    # 位置
+        track_velo = tracker.pos_velo[:,2:].clone()   # 速度
+        obj_pts = detector.pos_velo[:,:2].clone()   # 检测位置
         # detach position
-        track_pts = track_pts.detach()
+        track_pts = track_pts.detach()    # 不参与梯度计算
         obj_pts = obj_pts.detach()
         # detach velocity
         track_velo = track_velo.detach()
         fuse_type = self.pos_cfg.get('fuse_type', 'sum')
         # update to current position
-        track_pts_now = track_pts + track_velo * time_delta.float()
+        track_pts_now = track_pts + track_velo * time_delta.float()   # 根据时间差计算当前track位置
         
         # calculate relative distance
         rel_dist = (obj_pts[:,None] - track_pts_now[None])**2
-        rel_dist = rel_dist.sum(-1, keepdim=True).sqrt()
+        rel_dist = rel_dist.sum(-1, keepdim=True).sqrt()    # 欧氏距离
 
-        motion_embedding = self.rel_dist_embed(rel_dist)
+        motion_embedding = self.rel_dist_embed(rel_dist)   # FFN
         appear_embedding = obj_embedding[:,None] * track_embedding[None]
         # fuse embedding according to type
         if 'sum' in fuse_type:
@@ -323,8 +323,8 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
         else:
             det_track_dist = torch.zeros(valid_det.sum(), valid_track.sum())
 
-        det_cate = detector.pred_logits[valid_det].argmax(1)
-        track_cate = tracker.pred_logits[valid_track].argmax(1)
+        det_cate = detector.pred_logits[valid_det].argmax(1)      # 检测类别
+        track_cate = tracker.pred_logits[valid_track].argmax(1)     # 跟踪类别
         if self.tracker_cfg.get('class_dict', None):
             class_dict = self.tracker_cfg.class_dict
             invalid = []
@@ -343,7 +343,7 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
         if len(velo_error) > 0:
             invalid = invalid + (det_track_dist > velo_error[det_cate,None])
         
-        assign_mat = match_mat - invalid * 10
+        assign_mat = match_mat - invalid * 10       # 计算分配矩阵（减去无效匹配的惩罚）
         match_pairs = linear_sum_assignment(assign_mat.cpu().numpy(), maximize=True)
         match_pairs = np.array([match_pairs[0], match_pairs[1]]).T
         match_pairs = torch.tensor(match_pairs).to(tracker.query_track.device)
@@ -353,7 +353,7 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
         
         # update info for matched tracklets
         if len(match_pairs) > 0:
-            match_dets = match_pairs[valid_mask,0]
+            match_dets = match_pairs[valid_mask,0]      # 匹配的detect索引
             match_tracks = match_pairs[valid_mask,1]
             tmp_tracker = tracker[valid_track]
             tmp_detector = detector[valid_det]
@@ -408,14 +408,14 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
 
     def tracklet_asso_test(self, tracker, detector, time_delta=None, img_metas=None):
         # sort det results according to predicted score
-        detector = self.sort_and_filter(detector, img_metas)
+        detector = self.sort_and_filter(detector, img_metas)    # 根据预测分数排序和过滤检测框
         # active track at each frame
-        tracker.active[:] = False
+        tracker.active[:] = False       # 每帧激活跟踪标记重置
         # select valide track according to det score
         valid_det = (detector.scores >= self.tracker_cfg.det_thres)
         valid_track = tracker.valid_track.clone()
         # select positive classes for tracking
-        if self.tracker_cfg.get('class_dict', None):
+        if self.tracker_cfg.get('class_dict', None):    # 仅选择跟踪类别
             class_dict = self.tracker_cfg.class_dict
             pred_cls = detector.pred_logits.argmax(dim=1)
             det_mask = [class_dict['all_classes'][_idx] in class_dict['track_classes']
@@ -434,7 +434,7 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
         if valid_track.sum() == 0:
             tracker.query_track[:det_num] = track_embedding_nb
             tracker.track_score[:det_num] = detector.scores[valid_det]
-            tracker.pred_logits[:det_num] = detector.pred_logits[valid_det][:,self.det2track]
+            tracker.pred_logits[:det_num] = detector.pred_logits[valid_det][:,self.det2track]   # 这是？
             tracker.pred_boxes[:det_num] = detector.pred_boxes[valid_det]
             tracker.ref_pts[:det_num] = detector.ref_pts[valid_det]
             tracker.pos_velo[:det_num] = detector.pos_velo[valid_det]
@@ -450,7 +450,7 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
             return tracker
 
         track_embedding = tracker.query_track[valid_track]
-        # use update 
+        # use update # 计算关联矩阵和更新后的跟踪框位置
         det2track_mat, track_pts_now = self.query_asso(detector[valid_det],
                                                         tracker[valid_track],
                                                         obj_embedding,
@@ -535,7 +535,7 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
         ego_pts = torch.cat([detector.ref_pts, 
                                 torch.ones(len(detector),1).to(detector.ref_pts.device)],
                             dim=1)
-        ego_pts = ego_pts @ l2e_mat.T
+        ego_pts = ego_pts @ l2e_mat.T   # 用于计算目标到自车的距离，进行目标过滤
         radius = (ego_pts[:,:2] ** 2).sum(dim=1).sqrt()
         detector.scores[radius>cls_range] *= 0.0
         
@@ -543,7 +543,7 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
 
 
     def trans2real_world(self, detector, img_metas):
-        # transfer object center to real world
+        # transfer object center to real world  """将目标中心转换到真实世界坐标系"""
         # reference points (x,y,z)
         ref_pts = torch.cat([detector.pred_boxes[...,:2],detector.pred_boxes[...,4:5]], dim=1)
         # predicted velocity (vx, vy)
@@ -572,22 +572,22 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
 
     def forward_detector(self, img, img_metas, detector):
         img_feats = self.extract_feat(img=img, img_metas=img_metas)
-        pred_dict = self.pts_bbox_head(img_feats, img_metas)
+        pred_dict = self.pts_bbox_head(img_feats, img_metas)      # 预测结果
 
         return pred_dict, detector
 
     def forward_single(self, img, detector, img_metas, depth_map=None, frame_idx=0):
-        pred_dict, detector = self.forward_detector(img, img_metas, detector)
+        pred_dict, detector = self.forward_detector(img, img_metas, detector) # 单帧前向传播
         output_classes = pred_dict['all_cls_scores'][:,0].float()
         output_coords = pred_dict['all_bbox_preds'][:,0].float()
-        last_ref_pts = pred_dict['last_ref_points'][0].float()
-        last_query_feat = pred_dict['last_query_feat'][0].float()
+        last_ref_pts = pred_dict['last_ref_points'][0].float()      # 参考点
+        last_query_feat = pred_dict['last_query_feat'][0].float()   # query特征
 
         # Track score from last stage
         with torch.no_grad():
             det_scores = output_classes[-1].sigmoid().max(dim=-1).values
 
-        # change reference points
+        # change reference points  为什么要更改这些属性？ TODO
         detector.scores = det_scores
         detector.pred_logits = output_classes[-1]  # [300, num_cls]
         detector.pred_boxes = output_coords[-1]  # [300, box_dim]
@@ -744,7 +744,7 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
             num_frame = len(points[0])
         
         timestamp = timestamp[0]
-        scene_token = img_metas[0]['scene_token'][0]
+        scene_token = img_metas[0]['scene_token'][0]    # 场景标识
         img_metas[0]['scene_change'] = False
         init_frame = False
         # The initial scene
@@ -764,7 +764,7 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
             tracker = self.test_tracker
             time_delta = timestamp[0] - self.timestamp
 
-        self.timestamp = timestamp[-1]
+        self.timestamp = timestamp[-1]  # 记录上一帧时间戳
         assert timestamp[-1] == timestamp[0]
         self.scene_token = scene_token
 
@@ -777,8 +777,8 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
             if 'uni_rot_aug' in img_metas_single[0]:
                 img_metas_single[0]['uni_rot_aug'] = img_metas_single[0]['uni_rot_aug'][frame_idx]
 
-            img_metas_single[0]['pad_shape'] = img_metas_single[0]['pad_shape'][frame_idx]
-            img_metas_single[0]['img_shape'] = img_metas_single[0]['img_shape'][frame_idx]
+            img_metas_single[0]['pad_shape'] = img_metas_single[0]['pad_shape'][frame_idx]    # 填充之后的图像shape
+            img_metas_single[0]['img_shape'] = img_metas_single[0]['img_shape'][frame_idx]    # 输入模型的图像shape
             img_metas_single[0]['timestamp'] = img_metas_single[0]['timestamp'][frame_idx]
             img_metas_single[0]['lidar2img'] = img_metas_single[0]['lidar2img'][frame_idx]
             img_metas_single[0]['box_type_3d'] = img_metas_single[0]['box_type_3d'][frame_idx]
@@ -802,8 +802,8 @@ class DETR3DTrackerDQ(MVXTwoStageDetector):
     
     def generate_empty_detector(self):
         detector = Tracklet((1, 1))
-        num_det = self.tracker_cfg.get('num_query', 300)
-        dim = self.tracker_cfg.get('embed_dims', 256) * 2
+        num_det = self.tracker_cfg.get('num_query', 300)    # 900
+        dim = self.tracker_cfg.get('embed_dims', 256) * 2     # 512
         device = 'cuda'
         class_dict = self.tracker_cfg.get('class_dict', None)
         num_classes = 10 if class_dict is None else len(class_dict['all_classes'])
